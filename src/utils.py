@@ -41,6 +41,12 @@ def accuracy(output, target, topk=(1,)):
 
 
 def torch_save(classifier, save_path):
+    # Temporarily remove dataset to avoid pickle errors (contains lambda functions)
+    dataset_backup = None
+    if hasattr(classifier, 'dataset'):
+        dataset_backup = classifier.dataset
+        classifier.dataset = None
+
     # Create a dictionary to hold the parts of the model to be saved
     save_dict = {}
 
@@ -51,6 +57,10 @@ def torch_save(classifier, save_path):
     else:
         # classifier is already a state_dict (OrderedDict)
         save_dict = classifier if isinstance(classifier, dict) else {'state_dict': classifier}
+
+    # Restore dataset before saving extra attributes
+    if dataset_backup is not None:
+        classifier.dataset = dataset_backup
 
     # Save the state_dict of the visual_proj_pool ModuleList
     if hasattr(classifier, 'visual_proj_pool'):
