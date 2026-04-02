@@ -44,27 +44,7 @@ def prompt_tune(args):
     #     model = CustomCLIP_HPrompt(args, dataset.classnames, clip_model)
     if args.trainer == "DCPS":
         model = CustomCLIP_CPrompt(args, dataset, clip_model)
-        # model = clip_model.to("cpu")
-    # evaluate(model, args, val_preprocess)
 
-    # ===== 检查是否已有checkpoint =====
-    checkpoint_path = None
-    if args.save is not None:
-        checkpoint_path = os.path.join(args.save, f"{args.train_dataset}.pth")
-
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        # 已有checkpoint，直接加载
-        print(f"[INFO] Found existing checkpoint: {checkpoint_path}")
-        print(f"[INFO] Loading checkpoint and skipping training...")
-
-        utils.torch_load(model, checkpoint_path)
-        model = model.cuda()
-        model.update_pool(task_id, args.prompt_depth_text, args.prompt_depth_vision)
-        evaluate(model, args, val_preprocess, iteration=2000)
-
-        return model
-
-    # 正常训练流程
     if args.load is not None:
         utils.torch_load(model, args.load)
     model = model.cuda()
