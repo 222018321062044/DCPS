@@ -41,26 +41,29 @@ def accuracy(output, target, topk=(1,)):
 
 
 def torch_save(classifier, save_path):
-    # Temporarily remove dataset to avoid pickle errors (contains lambda functions)
+    # Temporarily remove dataset and prompt_learner.templates to avoid pickle errors
     dataset_backup = None
+    templates_backup = None
     if hasattr(classifier, 'dataset'):
         dataset_backup = classifier.dataset
         classifier.dataset = None
+    if hasattr(classifier, 'prompt_learner') and hasattr(classifier.prompt_learner, 'templates'):
+        templates_backup = classifier.prompt_learner.templates
+        classifier.prompt_learner.templates = None
 
     # Create a dictionary to hold the parts of the model to be saved
     save_dict = {}
 
-    # ★ 保存完整的state_dict（包括prompt_learner的A_prime等参数）
-    # Check if classifier is a model with state_dict method or already a state_dict
     if hasattr(classifier, 'state_dict') and callable(classifier.state_dict):
         save_dict['state_dict'] = classifier.state_dict()
     else:
-        # classifier is already a state_dict (OrderedDict)
         save_dict = classifier if isinstance(classifier, dict) else {'state_dict': classifier}
 
-    # Restore dataset before saving extra attributes
+    # Restore dataset and templates
     if dataset_backup is not None:
         classifier.dataset = dataset_backup
+    if templates_backup is not None:
+        classifier.prompt_learner.templates = templates_backup
 
     # Save the state_dict of the visual_proj_pool ModuleList
     if hasattr(classifier, 'visual_proj_pool'):
