@@ -1,5 +1,6 @@
 import os
 import random
+from collections import OrderedDict
 
 import numpy as np
 import torch
@@ -40,80 +41,117 @@ def accuracy(output, target, topk=(1,)):
     ]
 
 
-def torch_save(classifier, save_path):
-    # Temporarily remove dataset and prompt_learner.templates to avoid pickle errors
-    dataset_backup = None
-    templates_backup = None
-    if hasattr(classifier, 'dataset'):
-        dataset_backup = classifier.dataset
-        classifier.dataset = None
-    if hasattr(classifier, 'prompt_learner') and hasattr(classifier.prompt_learner, 'templates'):
-        templates_backup = classifier.prompt_learner.templates
-        classifier.prompt_learner.templates = None
+CHECKPOINT_EXPORT_KEYS = (
+    "prototype_feature",
+    "prompt_pool",
+    "text_prompt_pool",
+    "visual_prompt_pool",
+    "proj_down_weight",
+    "proj_down_bias",
+    "proj_up_weight",
+    "proj_up_bias",
+    "ItoT_down_weight",
+    "ItoT_down_bias",
+    "ItoT_up_weight",
+    "ItoT_up_bias",
+    "TtoI_down_weight",
+    "TtoI_down_bias",
+    "TtoI_up_weight",
+    "TtoI_up_bias",
+    "scale_vector_image",
+    "scale_vector",
+    "A_prime_pool",
+)
 
-    # Create a dictionary to hold the parts of the model to be saved
-    save_dict = {}
 
-    if hasattr(classifier, 'state_dict') and callable(classifier.state_dict):
-        save_dict['state_dict'] = classifier.state_dict()
+def _clone_tensor(value):
+    if isinstance(value, torch.nn.Parameter):
+        value = value.detach()
+    elif torch.is_tensor(value):
+        value = value.detach()
     else:
-        save_dict = classifier if isinstance(classifier, dict) else {'state_dict': classifier}
+        raise TypeError(f"Expected tensor-like value, got {type(value).__name__}")
+    return value.cpu().clone()
 
-    # Restore dataset and templates
-    if dataset_backup is not None:
-        classifier.dataset = dataset_backup
-    if templates_backup is not None:
-        classifier.prompt_learner.templates = templates_backup
 
-    # Save the state_dict of the visual_proj_pool ModuleList
-    if hasattr(classifier, 'visual_proj_pool'):
-        save_dict['visual_proj_pool'] = classifier.visual_proj_pool.state_dict()
+def _cpu_state_dict(module):
+    state_dict = OrderedDict()
+    for key, value in module.state_dict().items():
+        state_dict[key] = _clone_tensor(value)
+    return state_dict
 
-    if hasattr(classifier, 'visual_align_pool'):
-        save_dict['visual_align_pool'] = classifier.visual_align_pool
-    if hasattr(classifier, 'text_align_pool'):
-        save_dict['text_align_pool'] = classifier.text_align_pool
-    if hasattr(classifier, 'scale_I_pool'):
-        save_dict['scale_I_pool'] = classifier.scale_I_pool
-    if hasattr(classifier, 'scale_T_pool'):
-        save_dict['scale_T_pool'] = classifier.scale_T_pool
-    if hasattr(classifier, 'proj_down_weight'):
-        save_dict['proj_down_weight'] = classifier.proj_down_weight
-    if hasattr(classifier, 'proj_up_weight'):
-        save_dict['proj_up_weight'] = classifier.proj_up_weight
-    if hasattr(classifier, 'proj_down_bias'):
-        save_dict['proj_down_bias'] = classifier.proj_down_bias
-    if hasattr(classifier, 'proj_up_bias'):
-        save_dict['proj_up_bias'] = classifier.proj_up_bias
-    if hasattr(classifier, 'scale_vector_image'):
-        save_dict['scale_vector_image'] = classifier.scale_vector_image
-    if hasattr(classifier, 'scale_vector'):
-        save_dict['scale_vector'] = classifier.scale_vector
-    if hasattr(classifier, 'ItoT_down_weight'):
-        save_dict['ItoT_down_weight'] = classifier.ItoT_down_weight
-    if hasattr(classifier, 'ItoT_up_weight'):
-        save_dict['ItoT_up_weight'] = classifier.ItoT_up_weight
-    if hasattr(classifier, 'ItoT_down_bias'):
-        save_dict['ItoT_down_bias'] = classifier.ItoT_down_bias
-    if hasattr(classifier, 'ItoT_up_bias'):
-        save_dict['ItoT_up_bias'] = classifier.ItoT_up_bias
-    if hasattr(classifier, 'TtoI_down_weight'):
-        save_dict['TtoI_down_weight'] = classifier.TtoI_down_weight
-    if hasattr(classifier, 'TtoI_up_weight'):
-        save_dict['TtoI_up_weight'] = classifier.TtoI_up_weight
-    if hasattr(classifier, 'TtoI_down_bias'):
-        save_dict['TtoI_down_bias'] = classifier.TtoI_down_bias
-    if hasattr(classifier, 'TtoI_up_bias'):
-        save_dict['TtoI_up_bias'] = classifier.TtoI_up_bias
-    # Save the prototype_feature buffer
-    save_dict['prototype_feature'] = classifier.prototype_feature
-    save_dict['prompt_pool'] = classifier.prompt_pool
-    # Save the text_prompt_pool buffer
-    save_dict['text_prompt_pool'] = classifier.text_prompt_pool
 
-    # Save the visual_prompt_pool buffer
-    if hasattr(classifier, 'visual_prompt_pool'):
-        save_dict['visual_prompt_pool'] = classifier.visual_prompt_pool
+def _infer_pool_width(pool, fallback_tensor=None):
+    if fallback_tensor is not None and torch.is_tensor(fallback_tensor):
+        return int(fallback_tensor.numel())
+    for row in pool:
+        if torch.is_tensor(row) or isinstance(row, torch.nn.Parameter):
+            return int(row.numel())
+    return 0
+
+
+def _materialize_vector_pool(pool, fallback_tensor=None):
+    if torch.is_tensor(pool):
+        return _clone_tensor(pool)
+
+    width = _infer_pool_width(pool, fallback_tensor=fallback_tensor)
+    rows = []
+    for row in pool:
+        if torch.is_tensor(row) or isinstance(row, torch.nn.Parameter):
+            rows.append(_clone_tensor(row).reshape(-1))
+        else:
+            rows.append(torch.zeros(width, dtype=torch.float32))
+
+    if not rows:
+        return torch.empty(0, width, dtype=torch.float32)
+    return torch.stack(rows, dim=0)
+
+
+def torch_save(classifier, save_path):
+    if hasattr(classifier, "state_dict") and callable(classifier.state_dict):
+        state_dict = _cpu_state_dict(classifier)
+        save_dict = {
+            "checkpoint_version": 2,
+            "state_dict": state_dict,
+        }
+    else:
+        if not isinstance(classifier, dict):
+            raise TypeError(
+                "torch_save expects a module with state_dict() or a plain dict checkpoint."
+            )
+        save_dict = {
+            "checkpoint_version": 2,
+            "state_dict": classifier,
+        }
+        state_dict = classifier
+
+    for key in CHECKPOINT_EXPORT_KEYS:
+        if key in state_dict:
+            save_dict[key] = state_dict[key]
+
+    if hasattr(classifier, "scale_I_pool"):
+        fallback = None
+        if hasattr(classifier, "prompt_learner") and hasattr(classifier.prompt_learner, "scale_I"):
+            fallback = classifier.prompt_learner.scale_I
+        save_dict["scale_I_pool"] = _materialize_vector_pool(
+            classifier.scale_I_pool,
+            fallback_tensor=fallback,
+        )
+
+    if hasattr(classifier, "scale_T_pool"):
+        fallback = None
+        if hasattr(classifier, "prompt_learner") and hasattr(classifier.prompt_learner, "scale_T"):
+            fallback = classifier.prompt_learner.scale_T
+        save_dict["scale_T_pool"] = _materialize_vector_pool(
+            classifier.scale_T_pool,
+            fallback_tensor=fallback,
+        )
+
+    if hasattr(classifier, "visual_proj_pool"):
+        save_dict["visual_proj_pool"] = {
+            key: _clone_tensor(value)
+            for key, value in classifier.visual_proj_pool.state_dict().items()
+        }
 
     # Make sure the save directory exists
     if os.path.dirname(save_path) != "":
@@ -125,12 +163,58 @@ def torch_save(classifier, save_path):
 
 
 def torch_load(classifier, save_path, device=None):
-    checkpoint = torch.load(save_path, weights_only=False)
+    checkpoint = torch.load(save_path, map_location="cpu", weights_only=False)
 
-    missing_keys, unexpected_keys = classifier.load_state_dict(
-        checkpoint, strict=False
-    )
+    if not isinstance(checkpoint, dict):
+        checkpoint = {"state_dict": checkpoint}
+
+    model_state = classifier.state_dict()
+    if "state_dict" in checkpoint and isinstance(checkpoint["state_dict"], dict):
+        load_state = OrderedDict(checkpoint["state_dict"])
+    else:
+        load_state = OrderedDict(
+            (key, value)
+            for key, value in checkpoint.items()
+            if key in model_state and torch.is_tensor(value)
+        )
+
+    for key, value in checkpoint.items():
+        if key in model_state and torch.is_tensor(value):
+            load_state[key] = value
+
+    missing_keys, unexpected_keys = classifier.load_state_dict(load_state, strict=False)
+
+    if "scale_I_pool" in checkpoint and hasattr(classifier, "scale_I_pool"):
+        scale_i_pool = checkpoint["scale_I_pool"]
+        if not torch.is_tensor(scale_i_pool):
+            fallback = None
+            if hasattr(classifier, "prompt_learner") and hasattr(classifier.prompt_learner, "scale_I"):
+                fallback = classifier.prompt_learner.scale_I
+            scale_i_pool = _materialize_vector_pool(
+                scale_i_pool,
+                fallback_tensor=fallback,
+            )
+        if hasattr(classifier, "prompt_learner") and hasattr(classifier.prompt_learner, "scale_I"):
+            scale_i_pool = scale_i_pool.to(classifier.prompt_learner.scale_I.device)
+        setattr(classifier, "scale_I_pool", scale_i_pool)
+
+    if "scale_T_pool" in checkpoint and hasattr(classifier, "scale_T_pool"):
+        scale_t_pool = checkpoint["scale_T_pool"]
+        if not torch.is_tensor(scale_t_pool):
+            fallback = None
+            if hasattr(classifier, "prompt_learner") and hasattr(classifier.prompt_learner, "scale_T"):
+                fallback = classifier.prompt_learner.scale_T
+            scale_t_pool = _materialize_vector_pool(
+                scale_t_pool,
+                fallback_tensor=fallback,
+            )
+        if hasattr(classifier, "prompt_learner") and hasattr(classifier.prompt_learner, "scale_T"):
+            scale_t_pool = scale_t_pool.to(classifier.prompt_learner.scale_T.device)
+        setattr(classifier, "scale_T_pool", scale_t_pool)
+
     for key in unexpected_keys:
+        if key in {"state_dict", "checkpoint_version", "scale_I_pool", "scale_T_pool"}:
+            continue
         if hasattr(classifier, key):
             setattr(classifier, key, checkpoint[key])
 
