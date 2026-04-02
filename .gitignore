@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.coverage
+coverage.xml
+
+# Virtual environments
+.venv/
+venv/
+env/
+CLIP/.venv/
+.python-version
+.env
+
+# IDE / local tooling
+.idea/
+.vscode/
+.claude/
+
+# Training outputs and caches
+ckpt/
+results/
+figures/
+logs/
+*.npz
+data/
+wandb/
+
+# Large local model artifacts
+*.pth
+*.pt
+*.bin
+*.safetensors
+open_clip_model/
+
+# OS / temporary files
+.DS_Store
+Thumbs.db
+nul
+*.tmp
+*.log
+
+# Local review artifacts
+ICME_DCPS_review.pdf
+review_page_*.png
+rebuttal.tex
+
+# Packaging / distribution
+build/
+dist/
+*.egg-info/

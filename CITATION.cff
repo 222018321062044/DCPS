@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use DCPS, please cite the accompanying paper and this software record."
+title: "DCPS: Dynamic Cache-Prompt Synergy"
+type: software
+license: MIT
+authors:
+  - family-names: "Liao"
+    given-names: "Yu"
+  - family-names: "Peng"
+    given-names: "Haoran"
+  - family-names: "Wang"
+    given-names: "Yuchen"
+  - family-names: "Jing"
+    given-names: "Mengmeng"
+  - family-names: "Yang"
+    given-names: "Kunshan"
+abstract: >-
+  Official codebase for Dynamic Cache-Prompt Synergy (DCPS), a prompt-based
+  continual learning method for CLIP under multi-domain incremental learning.
+keywords:
+  - continual learning
+  - CLIP
+  - prompt learning
+  - distribution shift
+  - incremental learning
+preferred-citation:
+  type: conference-paper
+  title: "Dynamic Cache-Prompt Synergy: Overcoming Distribution Shifts in Efficient Continual Learning"
+  authors:
+    - family-names: "Liao"
+      given-names: "Yu"
+    - family-names: "Peng"
+      given-names: "Haoran"
+    - family-names: "Wang"
+      given-names: "Yuchen"
+    - family-names: "Jing"
+      given-names: "Mengmeng"
+    - family-names: "Yang"
+      given-names: "Kunshan"
+  year: 2026
+  publisher: "IEEE International Conference on Multimedia and Expo (ICME)"
