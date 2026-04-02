@@ -45,7 +45,12 @@ def torch_save(classifier, save_path):
     save_dict = {}
 
     # ★ 保存完整的state_dict（包括prompt_learner的A_prime等参数）
-    save_dict['state_dict'] = classifier.state_dict()
+    # Check if classifier is a model with state_dict method or already a state_dict
+    if hasattr(classifier, 'state_dict') and callable(classifier.state_dict):
+        save_dict['state_dict'] = classifier.state_dict()
+    else:
+        # classifier is already a state_dict (OrderedDict)
+        save_dict = classifier if isinstance(classifier, dict) else {'state_dict': classifier}
 
     # Save the state_dict of the visual_proj_pool ModuleList
     if hasattr(classifier, 'visual_proj_pool'):
@@ -137,43 +142,14 @@ def torch_save(classifier, save_path):
 #     if device is not None:
 #         classifier = classifier.to(device)
 #     return classifier
-
 def torch_load(classifier, save_path, device=None):
-    checkpoint = torch.load(save_path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(save_path, weights_only=False)
 
-    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
-        state_dict = checkpoint["state_dict"]
-        extra_state = {key: value for key, value in checkpoint.items() if key != "state_dict"}
-    else:
-        state_dict = checkpoint
-        extra_state = {}
-
-    # Remove dataset-dependent keys that should not be loaded across different datasets
-    keys_to_remove = []
-    for key in state_dict.keys():
-        if any(k in key for k in ["prompt_learner.token_prefix", "prompt_learner.token_suffix",
-                                   "prompt_learner.embedding", "prompt_learner.tokenized_prompts"]):
-            keys_to_remove.append(key)
-    for key in keys_to_remove:
-        del state_dict[key]
-
-    _, unexpected_keys = classifier.load_state_dict(state_dict, strict=False)
-
-    if isinstance(checkpoint, dict):
-        for key, value in extra_state.items():
-            if not hasattr(classifier, key):
-                continue
-            target = getattr(classifier, key)
-            if hasattr(target, "load_state_dict") and isinstance(value, dict):
-                target.load_state_dict(value)
-            else:
-                setattr(classifier, key, value)
-
-        # Preserve backward compatibility for older raw checkpoints that may
-        # expose non-parameter buffers as unexpected top-level keys.
-        for key in unexpected_keys:
-            if key in extra_state or not hasattr(classifier, key):
-                continue
+    missing_keys, unexpected_keys = classifier.load_state_dict(
+        checkpoint, strict=False
+    )
+    for key in unexpected_keys:
+        if hasattr(classifier, key):
             setattr(classifier, key, checkpoint[key])
 
     if device is not None:
