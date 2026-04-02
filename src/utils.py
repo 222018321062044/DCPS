@@ -148,6 +148,15 @@ def torch_load(classifier, save_path, device=None):
         state_dict = checkpoint
         extra_state = {}
 
+    # Remove dataset-dependent keys that should not be loaded across different datasets
+    keys_to_remove = []
+    for key in state_dict.keys():
+        if any(k in key for k in ["prompt_learner.token_prefix", "prompt_learner.token_suffix",
+                                   "prompt_learner.embedding", "prompt_learner.tokenized_prompts"]):
+            keys_to_remove.append(key)
+    for key in keys_to_remove:
+        del state_dict[key]
+
     _, unexpected_keys = classifier.load_state_dict(state_dict, strict=False)
 
     if isinstance(checkpoint, dict):
