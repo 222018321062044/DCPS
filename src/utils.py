@@ -1,4 +1,5 @@
 import os
+import pickle
 import random
 from collections import OrderedDict
 
@@ -65,19 +66,27 @@ CHECKPOINT_EXPORT_KEYS = (
 
 
 def _clone_tensor(value):
+    """Clone a tensor or parameter to CPU, detaching from any computation graph."""
     if isinstance(value, torch.nn.Parameter):
-        value = value.detach()
+        # Get the underlying tensor and detach
+        value = value.data.detach()
     elif torch.is_tensor(value):
         value = value.detach()
     else:
         raise TypeError(f"Expected tensor-like value, got {type(value).__name__}")
-    return value.cpu().clone()
+    # Move to CPU and create a clean copy
+    return value.cpu().clone().detach()
 
 
 def _cpu_state_dict(module):
+    """Safely extract state_dict, converting all tensors to CPU."""
     state_dict = OrderedDict()
     for key, value in module.state_dict().items():
-        state_dict[key] = _clone_tensor(value)
+        try:
+            state_dict[key] = _clone_tensor(value)
+        except (TypeError, AttributeError) as e:
+            # Skip values that can't be converted (e.g., contain unpickleable references)
+            print(f"Warning: Skipping state_dict key '{key}': {e}")
     return state_dict
 
 
@@ -107,6 +116,28 @@ def _materialize_vector_pool(pool, fallback_tensor=None):
     return torch.stack(rows, dim=0)
 
 
+def _is_pickleable(obj):
+    """Check if an object can be pickled."""
+    try:
+        import io
+        with io.BytesIO() as f:
+            pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+        return True
+    except (pickle.PicklingError, TypeError, AttributeError):
+        return False
+
+
+def _safe_assign(save_dict, key, value, verbose=True):
+    """Safely assign a value to save_dict only if it's pickleable."""
+    if _is_pickleable(value):
+        save_dict[key] = value
+        return True
+    else:
+        if verbose:
+            print(f"Warning: Skipping '{key}' - contains unpickleable object")
+        return False
+
+
 def torch_save(classifier, save_path):
     if hasattr(classifier, "state_dict") and callable(classifier.state_dict):
         state_dict = _cpu_state_dict(classifier)
@@ -125,9 +156,10 @@ def torch_save(classifier, save_path):
         }
         state_dict = classifier
 
+    # Safely add keys from CHECKPOINT_EXPORT_KEYS
     for key in CHECKPOINT_EXPORT_KEYS:
         if key in state_dict:
-            save_dict[key] = state_dict[key]
+            _safe_assign(save_dict, key, state_dict[key])
 
     if hasattr(classifier, "scale_I_pool"):
         fallback = None
@@ -152,6 +184,18 @@ def torch_save(classifier, save_path):
             key: _clone_tensor(value)
             for key, value in classifier.visual_proj_pool.state_dict().items()
         }
+
+    # Final validation: check if the entire save_dict can be pickled
+    if not _is_pickleable(save_dict):
+        # If not, try to identify and remove problematic keys
+        print("Warning: save_dict contains unpickleable objects, attempting to fix...")
+        fixed_dict = {"checkpoint_version": 2}
+        for key, value in save_dict.items():
+            if _is_pickleable(value):
+                fixed_dict[key] = value
+            else:
+                print(f"Warning: Removing unpickleable key '{key}' from checkpoint")
+        save_dict = fixed_dict
 
     # Make sure the save directory exists
     if os.path.dirname(save_path) != "":
