@@ -121,37 +121,6 @@ def torch_save(classifier, save_path):
     print("Checkpoint saved to", save_path)
 
 
-# def torch_save(classifier, save_path):
-#     if os.path.dirname(save_path) != "":
-#         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-#     # torch.save({"state_dict": classifier.state_dict()}, save_path)
-#     if callable(classifier.state_dict):
-#         state_dict = classifier.state_dict()
-#     else:
-#         state_dict = classifier.state_dict
-#     torch.save({"state_dict": state_dict}, save_path)
-#     print("Checkpoint saved to", save_path)
-# def torch_load(classifier, save_path, device=None):
-#     print("当前工作目录:", os.getcwd())
-#     print(f"文件存在: {os.path.exists(save_path)}")
-#     absolute_path = os.path.abspath(save_path)
-#     print("绝对路径:", absolute_path)
-#     checkpoint = torch.load(save_path, weights_only=False)
-#
-#
-#     # 处理特定类型的属性加载
-#     if 'visual_proj_pool' in checkpoint and hasattr(classifier, 'visual_proj_pool'):
-#         classifier.visual_proj_pool.load_state_dict(checkpoint['visual_proj_pool'])
-#
-#     # 加载直接属性
-#     for key in ['visual_align_pool', 'text_align_pool', 'prototype_feature',
-#                 'text_prompt_pool', 'visual_prompt_pool']:
-#         if key in checkpoint and hasattr(classifier, key):
-#             setattr(classifier, key, checkpoint[key])
-#
-#     if device is not None:
-#         classifier = classifier.to(device)
-#     return classifier
 def torch_load(classifier, save_path, device=None):
     checkpoint = torch.load(save_path, weights_only=False)
 
