@@ -214,26 +214,14 @@ def torch_load(classifier, save_path, device=None):
 
     model_state = classifier.state_dict()
 
-    # Keys that should be skipped because they are dynamically generated
-    SKIP_LOADING_KEYS = {
-        "prompt_learner.token_prefix",
-        "prompt_learner.token_suffix",
-    }
-
+    # Build load_state from checkpoint's state_dict
     if "state_dict" in checkpoint and isinstance(checkpoint["state_dict"], dict):
         load_state = OrderedDict()
         for key, value in checkpoint["state_dict"].items():
-            if key in SKIP_LOADING_KEYS:
+            # Skip dynamically generated buffers that depend on dataset size
+            if key in ("prompt_learner.token_prefix", "prompt_learner.token_suffix"):
                 continue
-            # Skip if shapes don't match
-            if key in model_state and torch.is_tensor(value):
-                if value.shape == model_state[key].shape:
-                    load_state[key] = value
-                else:
-                    print(f"Warning: Skipping '{key}' due to shape mismatch: "
-                          f"checkpoint {value.shape} vs model {model_state[key].shape}")
-            else:
-                load_state[key] = value
+            load_state[key] = value
     else:
         load_state = OrderedDict(
             (key, value)
@@ -241,12 +229,10 @@ def torch_load(classifier, save_path, device=None):
             if key in model_state and torch.is_tensor(value)
         )
 
+    # Also load top-level tensor keys
     for key, value in checkpoint.items():
-        if key in SKIP_LOADING_KEYS:
-            continue
         if key in model_state and torch.is_tensor(value):
-            if value.shape == model_state[key].shape:
-                load_state[key] = value
+            load_state[key] = value
 
     missing_keys, unexpected_keys = classifier.load_state_dict(load_state, strict=False)
 
