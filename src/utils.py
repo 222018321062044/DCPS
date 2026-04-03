@@ -44,66 +44,83 @@ def torch_save(classifier, save_path):
     # Create a dictionary to hold the parts of the model to be saved
     save_dict = {}
 
-    # Save the complete state_dict
-    save_dict['state_dict'] = classifier.state_dict()
+    # Temporarily remove unpickleable attributes to avoid serialization errors
+    dataset_backup = getattr(classifier, 'dataset', None)
+    templates_backup = None
+    if hasattr(classifier, 'prompt_learner') and hasattr(classifier.prompt_learner, 'templates'):
+        templates_backup = classifier.prompt_learner.templates
+        classifier.prompt_learner.templates = None
+    if hasattr(classifier, 'dataset'):
+        classifier.dataset = None
 
-    # Save the state_dict of the visual_proj_pool ModuleList
-    if hasattr(classifier, 'visual_proj_pool'):
-        save_dict['visual_proj_pool'] = classifier.visual_proj_pool.state_dict()
+    try:
+        # Save the complete state_dict
+        save_dict['state_dict'] = classifier.state_dict()
 
-    if hasattr(classifier, 'visual_align_pool'):
-        save_dict['visual_align_pool'] = classifier.visual_align_pool
-    if hasattr(classifier, 'text_align_pool'):
-        save_dict['text_align_pool'] = classifier.text_align_pool
-    if hasattr(classifier, 'scale_I_pool'):
-        save_dict['scale_I_pool'] = classifier.scale_I_pool
-    if hasattr(classifier, 'scale_T_pool'):
-        save_dict['scale_T_pool'] = classifier.scale_T_pool
-    if hasattr(classifier, 'proj_down_weight'):
-        save_dict['proj_down_weight'] = classifier.proj_down_weight
-    if hasattr(classifier, 'proj_up_weight'):
-        save_dict['proj_up_weight'] = classifier.proj_up_weight
-    if hasattr(classifier, 'proj_down_bias'):
-        save_dict['proj_down_bias'] = classifier.proj_down_bias
-    if hasattr(classifier, 'proj_up_bias'):
-        save_dict['proj_up_bias'] = classifier.proj_up_bias
-    if hasattr(classifier, 'scale_vector_image'):
-        save_dict['scale_vector_image'] = classifier.scale_vector_image
-    if hasattr(classifier, 'scale_vector'):
-        save_dict['scale_vector'] = classifier.scale_vector
-    if hasattr(classifier, 'ItoT_down_weight'):
-        save_dict['ItoT_down_weight'] = classifier.ItoT_down_weight
-    if hasattr(classifier, 'ItoT_up_weight'):
-        save_dict['ItoT_up_weight'] = classifier.ItoT_up_weight
-    if hasattr(classifier, 'ItoT_down_bias'):
-        save_dict['ItoT_down_bias'] = classifier.ItoT_down_bias
-    if hasattr(classifier, 'ItoT_up_bias'):
-        save_dict['ItoT_up_bias'] = classifier.ItoT_up_bias
-    if hasattr(classifier, 'TtoI_down_weight'):
-        save_dict['TtoI_down_weight'] = classifier.TtoI_down_weight
-    if hasattr(classifier, 'TtoI_up_weight'):
-        save_dict['TtoI_up_weight'] = classifier.TtoI_up_weight
-    if hasattr(classifier, 'TtoI_down_bias'):
-        save_dict['TtoI_down_bias'] = classifier.TtoI_down_bias
-    if hasattr(classifier, 'TtoI_up_bias'):
-        save_dict['TtoI_up_bias'] = classifier.TtoI_up_bias
-    # Save the prototype_feature buffer
-    save_dict['prototype_feature'] = classifier.prototype_feature
-    save_dict['prompt_pool'] = classifier.prompt_pool
-    # Save the text_prompt_pool buffer
-    save_dict['text_prompt_pool'] = classifier.text_prompt_pool
+        # Save the state_dict of the visual_proj_pool ModuleList
+        if hasattr(classifier, 'visual_proj_pool'):
+            save_dict['visual_proj_pool'] = classifier.visual_proj_pool.state_dict()
 
-    # Save the visual_prompt_pool buffer
-    if hasattr(classifier, 'visual_prompt_pool'):
-        save_dict['visual_prompt_pool'] = classifier.visual_prompt_pool
+        if hasattr(classifier, 'visual_align_pool'):
+            save_dict['visual_align_pool'] = classifier.visual_align_pool
+        if hasattr(classifier, 'text_align_pool'):
+            save_dict['text_align_pool'] = classifier.text_align_pool
+        if hasattr(classifier, 'scale_I_pool'):
+            save_dict['scale_I_pool'] = classifier.scale_I_pool
+        if hasattr(classifier, 'scale_T_pool'):
+            save_dict['scale_T_pool'] = classifier.scale_T_pool
+        if hasattr(classifier, 'proj_down_weight'):
+            save_dict['proj_down_weight'] = classifier.proj_down_weight
+        if hasattr(classifier, 'proj_up_weight'):
+            save_dict['proj_up_weight'] = classifier.proj_up_weight
+        if hasattr(classifier, 'proj_down_bias'):
+            save_dict['proj_down_bias'] = classifier.proj_down_bias
+        if hasattr(classifier, 'proj_up_bias'):
+            save_dict['proj_up_bias'] = classifier.proj_up_bias
+        if hasattr(classifier, 'scale_vector_image'):
+            save_dict['scale_vector_image'] = classifier.scale_vector_image
+        if hasattr(classifier, 'scale_vector'):
+            save_dict['scale_vector'] = classifier.scale_vector
+        if hasattr(classifier, 'ItoT_down_weight'):
+            save_dict['ItoT_down_weight'] = classifier.ItoT_down_weight
+        if hasattr(classifier, 'ItoT_up_weight'):
+            save_dict['ItoT_up_weight'] = classifier.ItoT_up_weight
+        if hasattr(classifier, 'ItoT_down_bias'):
+            save_dict['ItoT_down_bias'] = classifier.ItoT_down_bias
+        if hasattr(classifier, 'ItoT_up_bias'):
+            save_dict['ItoT_up_bias'] = classifier.ItoT_up_bias
+        if hasattr(classifier, 'TtoI_down_weight'):
+            save_dict['TtoI_down_weight'] = classifier.TtoI_down_weight
+        if hasattr(classifier, 'TtoI_up_weight'):
+            save_dict['TtoI_up_weight'] = classifier.TtoI_up_weight
+        if hasattr(classifier, 'TtoI_down_bias'):
+            save_dict['TtoI_down_bias'] = classifier.TtoI_down_bias
+        if hasattr(classifier, 'TtoI_up_bias'):
+            save_dict['TtoI_up_bias'] = classifier.TtoI_up_bias
+        # Save the prototype_feature buffer
+        save_dict['prototype_feature'] = classifier.prototype_feature
+        save_dict['prompt_pool'] = classifier.prompt_pool
+        # Save the text_prompt_pool buffer
+        save_dict['text_prompt_pool'] = classifier.text_prompt_pool
 
-    # Make sure the save directory exists
-    if os.path.dirname(save_path) != "":
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        # Save the visual_prompt_pool buffer
+        if hasattr(classifier, 'visual_prompt_pool'):
+            save_dict['visual_prompt_pool'] = classifier.visual_prompt_pool
 
-    # Save the dictionary
-    torch.save(save_dict, save_path)
-    print("Checkpoint saved to", save_path)
+        # Make sure the save directory exists
+        if os.path.dirname(save_path) != "":
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+        # Save the dictionary
+        torch.save(save_dict, save_path)
+        print("Checkpoint saved to", save_path)
+    finally:
+        # Restore the removed attributes
+        if dataset_backup is not None:
+            classifier.dataset = dataset_backup
+        if templates_backup is not None:
+            if hasattr(classifier, 'prompt_learner'):
+                classifier.prompt_learner.templates = templates_backup
 
 
 def torch_load(classifier, save_path, device=None):
