@@ -14,7 +14,7 @@ This repository keeps the DCPS training and checkpoint-evaluation workflow, plus
 ## Framework
 
 <p align="center">
-  <img src="images/framework.png" alt="DCPS Framework">
+  <img src="https://raw.githubusercontent.com/222018321062044/DCPS/main/images/framework.png" alt="DCPS Framework" width="800">
 </p>
 
 ## Repository Layout
