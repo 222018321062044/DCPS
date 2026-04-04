@@ -167,8 +167,6 @@ class CustomCLIP_CPrompt(nn.Module):
         text_prompt_pool = torch.empty(11, args.prompt_depth_text, args.n_ctx_text, 512, device=device)
         prompt_pool = torch.empty(11, 2, 512, device=device)
         visual_prompt_pool = torch.empty(11, args.prompt_depth_vision, args.n_ctx_vision, 768, device=device)
-        self.scale_T_pool = [[None] * 512 for _ in range(11)]
-        self.scale_I_pool = [[None] * 512 for _ in range(11)]
         self.hard_sample_ratio = args.hard_sample_ratio
         self.threshold_percentile = args.threshold_percentile
         self.hard_loss_weight = args.hard_loss_weight
@@ -205,6 +203,8 @@ class CustomCLIP_CPrompt(nn.Module):
         self.register_buffer("scale_vector_image",torch.empty(11, args.prompt_depth_vision, 512, device=device))
         self.register_buffer("scale_vector", torch.empty(11, args.prompt_depth_vision, 768, device=device))
         self.register_buffer("A_prime_pool", torch.empty(11, 2, 512, device=device))
+        self.register_buffer("scale_I_pool", torch.empty(11, 512, device=device))
+        self.register_buffer("scale_T_pool", torch.empty(11, 512, device=device))
         self.pos_cache = {}
         self.neg_cache = {}
 
@@ -357,9 +357,10 @@ class CustomCLIP_CPrompt(nn.Module):
 
     def update_pool(self, task_id, prompt_depth_text, prompt_depth_vision):
         with torch.no_grad():
-            self.prompt_pool[task_id] = self.prompt_learner.prompts_Image
-            self.scale_I_pool[task_id] = self.prompt_learner.scale_I
-            self.scale_T_pool[task_id] = self.prompt_learner.scale_T
+            self.prompt_pool[task_id] = self.prompt_learner.prompts_Image.data
+            self.scale_I_pool[task_id] = self.prompt_learner.scale_I.data
+            self.scale_T_pool[task_id] = self.prompt_learner.scale_T.data
+            self.A_prime_pool[task_id] = self.prompt_learner.A_prime.data
             self.TtoI_down_weight[task_id] = self.prompt_learner.TtoI.down_proj.weight.data
             self.TtoI_down_bias[task_id] = self.prompt_learner.TtoI.down_proj.bias.data
             self.TtoI_up_weight[task_id] = self.prompt_learner.TtoI.up_proj.weight.data
@@ -373,15 +374,23 @@ class CustomCLIP_CPrompt(nn.Module):
             self.proj_up_weight[task_id] = self.prompt_learner.projection_images.up_proj.weight.data
             self.proj_up_bias[task_id] = self.prompt_learner.projection_images.up_proj.bias.data
 
+            for i in range(prompt_depth_text):
+                self.text_prompt_pool[task_id][i] = self.text_encoder.transformer.resblocks[i].VPT_shallow
+                self.scale_vector_image[task_id][i] = self.text_encoder.transformer.resblocks[i].scale_vector_image
+
+            for i in range(prompt_depth_vision):
+                self.visual_prompt_pool[task_id][i] = self.image_encoder.transformer.resblocks[i].VPT_shallow
+                self.scale_vector[task_id][i] = self.image_encoder.transformer.resblocks[i].scale_vector
+
     def update_prototype_feature(self, task_id=None):
         if task_id is not None:
             with torch.no_grad():
                 prompts = self.prompt_learner.tokenized_prompts
                 prompts = prompts.to("cuda")
                 text_features = self.origin_model.encode_text(prompts)
-            temp_param = nn.Parameter(text_features.mean(dim=0, keepdim=True))
-            temp_param = F.normalize(temp_param, dim=1)
-            self.prototype_feature[task_id] = temp_param
+                temp_param = text_features.mean(dim=0, keepdim=True)
+                temp_param = F.normalize(temp_param, dim=1)
+                self.prototype_feature[task_id] = temp_param.data
 
     def select_prompt(self, task_id):
         prompt_depth_text = self.text_prompt_pool.shape[1]
@@ -389,6 +398,7 @@ class CustomCLIP_CPrompt(nn.Module):
         self.prompt_learner.prompts_Image.data = self.prompt_pool[task_id]
         self.prompt_learner.scale_I.data = self.scale_I_pool[task_id]
         self.prompt_learner.scale_T.data = self.scale_T_pool[task_id]
+        self.prompt_learner.A_prime.data = self.A_prime_pool[task_id]
         self.prompt_learner.projection_images.down_proj.weight.data = self.proj_down_weight[task_id]
         self.prompt_learner.projection_images.down_proj.bias.data = self.proj_down_bias[task_id]
         self.prompt_learner.projection_images.up_proj.weight.data = self.proj_up_weight[task_id]
@@ -401,6 +411,18 @@ class CustomCLIP_CPrompt(nn.Module):
         self.prompt_learner.TtoI.down_proj.bias.data = self.TtoI_down_bias[task_id]
         self.prompt_learner.TtoI.up_proj.weight.data = self.TtoI_up_weight[task_id]
         self.prompt_learner.TtoI.up_proj.bias.data = self.TtoI_up_bias[task_id]
+
+        for i in range(prompt_depth_text):
+            self.text_encoder.transformer.resblocks[i].VPT_shallow.data.copy_(
+                self.text_prompt_pool[task_id][i])
+            self.text_encoder.transformer.resblocks[i].scale_vector_image.data.copy_(
+                self.scale_vector_image[task_id][i])
+
+        for i in range(prompt_depth_vision):
+            self.image_encoder.transformer.resblocks[i].VPT_shallow.data.copy_(
+                self.visual_prompt_pool[task_id][i])
+            self.image_encoder.transformer.resblocks[i].scale_vector.data.copy_(
+                self.scale_vector[task_id][i])
 
     def contrastive_prompt_loss(image_features, text_features, labels, temp=0.07):
         image_features = F.normalize(image_features, dim=1)

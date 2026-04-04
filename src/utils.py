@@ -41,97 +41,106 @@ def accuracy(output, target, topk=(1,)):
 
 
 def torch_save(classifier, save_path):
-    # Create a dictionary to hold the parts of the model to be saved
     save_dict = {}
 
-    # Temporarily remove unpickleable attributes to avoid serialization errors
-    dataset_backup = getattr(classifier, 'dataset', None)
-    templates_backup = None
-    if hasattr(classifier, 'prompt_learner') and hasattr(classifier.prompt_learner, 'templates'):
-        templates_backup = classifier.prompt_learner.templates
-        classifier.prompt_learner.templates = None
-    if hasattr(classifier, 'dataset'):
-        classifier.dataset = None
+    # 定义要保存的键列表
+    save_keys = [
+        'scale_I_pool', 'scale_T_pool',
+        'proj_down_weight', 'proj_down_bias', 'proj_up_weight', 'proj_up_bias',
+        'scale_vector_image', 'scale_vector',
+        'ItoT_down_weight', 'ItoT_down_bias', 'ItoT_up_weight', 'ItoT_up_bias',
+        'TtoI_down_weight', 'TtoI_down_bias', 'TtoI_up_weight', 'TtoI_up_bias',
+        'prototype_feature', 'prompt_pool', 'text_prompt_pool', 'visual_prompt_pool', 'A_prime_pool'
+    ]
 
-    try:
-        # Save the complete state_dict
-        save_dict['state_dict'] = classifier.state_dict()
+    saved_keys = []
+    for key in save_keys:
+        if hasattr(classifier, key):
+            save_dict[key] = getattr(classifier, key)
+            saved_keys.append(key)
 
-        # Save the state_dict of the visual_proj_pool ModuleList
-        if hasattr(classifier, 'visual_proj_pool'):
-            save_dict['visual_proj_pool'] = classifier.visual_proj_pool.state_dict()
+    # Make sure the save directory exists
+    if os.path.dirname(save_path) != "":
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
-        if hasattr(classifier, 'visual_align_pool'):
-            save_dict['visual_align_pool'] = classifier.visual_align_pool
-        if hasattr(classifier, 'text_align_pool'):
-            save_dict['text_align_pool'] = classifier.text_align_pool
-        if hasattr(classifier, 'scale_I_pool'):
-            save_dict['scale_I_pool'] = classifier.scale_I_pool
-        if hasattr(classifier, 'scale_T_pool'):
-            save_dict['scale_T_pool'] = classifier.scale_T_pool
-        if hasattr(classifier, 'proj_down_weight'):
-            save_dict['proj_down_weight'] = classifier.proj_down_weight
-        if hasattr(classifier, 'proj_up_weight'):
-            save_dict['proj_up_weight'] = classifier.proj_up_weight
-        if hasattr(classifier, 'proj_down_bias'):
-            save_dict['proj_down_bias'] = classifier.proj_down_bias
-        if hasattr(classifier, 'proj_up_bias'):
-            save_dict['proj_up_bias'] = classifier.proj_up_bias
-        if hasattr(classifier, 'scale_vector_image'):
-            save_dict['scale_vector_image'] = classifier.scale_vector_image
-        if hasattr(classifier, 'scale_vector'):
-            save_dict['scale_vector'] = classifier.scale_vector
-        if hasattr(classifier, 'ItoT_down_weight'):
-            save_dict['ItoT_down_weight'] = classifier.ItoT_down_weight
-        if hasattr(classifier, 'ItoT_up_weight'):
-            save_dict['ItoT_up_weight'] = classifier.ItoT_up_weight
-        if hasattr(classifier, 'ItoT_down_bias'):
-            save_dict['ItoT_down_bias'] = classifier.ItoT_down_bias
-        if hasattr(classifier, 'ItoT_up_bias'):
-            save_dict['ItoT_up_bias'] = classifier.ItoT_up_bias
-        if hasattr(classifier, 'TtoI_down_weight'):
-            save_dict['TtoI_down_weight'] = classifier.TtoI_down_weight
-        if hasattr(classifier, 'TtoI_up_weight'):
-            save_dict['TtoI_up_weight'] = classifier.TtoI_up_weight
-        if hasattr(classifier, 'TtoI_down_bias'):
-            save_dict['TtoI_down_bias'] = classifier.TtoI_down_bias
-        if hasattr(classifier, 'TtoI_up_bias'):
-            save_dict['TtoI_up_bias'] = classifier.TtoI_up_bias
-        # Save the prototype_feature buffer
-        save_dict['prototype_feature'] = classifier.prototype_feature
-        save_dict['prompt_pool'] = classifier.prompt_pool
-        # Save the text_prompt_pool buffer
-        save_dict['text_prompt_pool'] = classifier.text_prompt_pool
+    # Save the dictionary
+    torch.save(save_dict, save_path)
 
-        # Save the visual_prompt_pool buffer
-        if hasattr(classifier, 'visual_prompt_pool'):
-            save_dict['visual_prompt_pool'] = classifier.visual_prompt_pool
+    # 打印保存状态和值
+    # print("="*50)
+    # print("Checkpoint 保存报告")
+    for key in saved_keys:
+        val = save_dict[key]
+        # if hasattr(val, 'shape'):
+        #     print(f"[{key}] 保存成功 | shape: {val.shape} | 前3个值: {val.flatten()[:3]}")
+        # else:
+        #     print(f"[{key}] 保存成功 | 值: {val}")
+    for key in save_keys:
+        if key not in saved_keys:
+            print(f"[{key}] 模型中不存在")
+    print(f"Checkpoint saved to {save_path}")
+    print("="*50)
 
-        # Make sure the save directory exists
-        if os.path.dirname(save_path) != "":
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
-        # Save the dictionary
-        torch.save(save_dict, save_path)
-        print("Checkpoint saved to", save_path)
-    finally:
-        # Restore the removed attributes
-        if dataset_backup is not None:
-            classifier.dataset = dataset_backup
-        if templates_backup is not None:
-            if hasattr(classifier, 'prompt_learner'):
-                classifier.prompt_learner.templates = templates_backup
-
+# def torch_save(classifier, save_path):
+#     if os.path.dirname(save_path) != "":
+#         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+#     # torch.save({"state_dict": classifier.state_dict()}, save_path)
+#     if callable(classifier.state_dict):
+#         state_dict = classifier.state_dict()
+#     else:
+#         state_dict = classifier.state_dict
+#     torch.save({"state_dict": state_dict}, save_path)
+#     print("Checkpoint saved to", save_path)
+# def torch_load(classifier, save_path, device=None):
+#     print("当前工作目录:", os.getcwd())
+#     print(f"文件存在: {os.path.exists(save_path)}")
+#     absolute_path = os.path.abspath(save_path)
+#     print("绝对路径:", absolute_path)
+#     checkpoint = torch.load(save_path, weights_only=False)
+#
+#
+#     # 处理特定类型的属性加载
+#     if 'visual_proj_pool' in checkpoint and hasattr(classifier, 'visual_proj_pool'):
+#         classifier.visual_proj_pool.load_state_dict(checkpoint['visual_proj_pool'])
+#
+#     # 加载直接属性
+#     for key in ['visual_align_pool', 'text_align_pool', 'prototype_feature',
+#                 'text_prompt_pool', 'visual_prompt_pool']:
+#         if key in checkpoint and hasattr(classifier, key):
+#             setattr(classifier, key, checkpoint[key])
+#
+#     if device is not None:
+#         classifier = classifier.to(device)
+#     return classifier
 
 def torch_load(classifier, save_path, device=None):
     checkpoint = torch.load(save_path, weights_only=False)
 
-    missing_keys, unexpected_keys = classifier.load_state_dict(
-        checkpoint, strict=False
-    )
-    for key in unexpected_keys:
-        if hasattr(classifier, key):
-            setattr(classifier, key, checkpoint[key])
+    print("="*50)
+    print("Checkpoint 加载报告")
+
+    # ===== 3. 加载 buffer（使用 register_buffer） =====
+    buffer_keys = [
+        'prototype_feature', 'prompt_pool', 'text_prompt_pool', 'visual_prompt_pool', 'A_prime_pool',
+        'scale_I_pool', 'scale_T_pool',
+        'proj_down_weight', 'proj_down_bias', 'proj_up_weight', 'proj_up_bias',
+        'scale_vector_image', 'scale_vector',
+        'ItoT_down_weight', 'ItoT_down_bias', 'ItoT_up_weight', 'ItoT_up_bias',
+        'TtoI_down_weight', 'TtoI_down_bias', 'TtoI_up_weight', 'TtoI_up_bias'
+    ]
+    for key in buffer_keys:
+        if key in checkpoint:
+            classifier.register_buffer(key, checkpoint[key])
+            val = checkpoint[key]
+            # if hasattr(val, 'shape'):
+            #     print(f"[{key}] 加载成功 | shape: {val.shape} | 前3个值: {val.flatten()[:3]}")
+            # else:
+            #     print(f"[{key}] 加载成功 | 值: {val}")
+        else:
+            print(f"[{key}] checkpoint中不存在")
+
+    print("="*50)
 
     if device is not None:
         classifier = classifier.to(device)

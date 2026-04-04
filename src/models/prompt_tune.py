@@ -49,6 +49,7 @@ def prompt_tune(args):
         utils.torch_load(model, args.load)
     model = model.cuda()
     model.update_prototype_feature(task_id=task_id)
+    model.select_prompt(task_id)  # 加载后需要同步 pool 参数到 prompt_learner
 
     if args.template is not None:
         template = getattr(templates, args.template)[0]
@@ -82,7 +83,7 @@ def prompt_tune(args):
     #         print(f"Trainable parameter: {name}")
     for name, param in model.named_parameters():
         # 定义需要更新梯度的模块名称关键词
-        update_keywords = [name_to_update,"VPT","scale_vector"]
+        update_keywords = [name_to_update, "VPT", "scale_vector"]
         # update_keywords = []
         # 检查当前参数是否包含任何一个关键词
         should_update = any(keyword in name for keyword in update_keywords)
@@ -104,37 +105,37 @@ def prompt_tune(args):
     else:
         params = model.parameters()
 
-    def count_parameters(model):
-        # 打印模型参数详细信息
-        print("=" * 80)
-        print("Model Parameters Details:")
-        print("=" * 80)
-
-        total_params = 0
-        trainable_params = 0
-
-        for name, param in model.named_parameters():
-            num_params = param.numel()
-            total_params += num_params
-            if param.requires_grad:
-                trainable_params += num_params
-                trainable_status = "Trainable"
-                print(f"{name:<60} | Shape: {str(param.shape):<20} | Params: {num_params:>9,} | Status: {trainable_status}")
-            else:
-                trainable_status = "Frozen"
-
-        print("=" * 80)
-        percentage = 100 * trainable_params / total_params if total_params > 0 else 0
-
-        print(f'Total Parameters: {total_params:,}')
-        print(f'Trainable Parameters: {trainable_params:,}')
-        print(f'Trainable Parameters Percentage: {percentage:.2f}%')
-        print("=" * 80)
-
-        return total_params, trainable_params, percentage
-
-    # 调用示例
-    total, trainable, percentage = count_parameters(model)
+    # def count_parameters(model):
+    #     # 打印模型参数详细信息
+    #     print("=" * 80)
+    #     print("Model Parameters Details:")
+    #     print("=" * 80)
+    #
+    #     total_params = 0
+    #     trainable_params = 0
+    #
+    #     for name, param in model.named_parameters():
+    #         num_params = param.numel()
+    #         total_params += num_params
+    #         if param.requires_grad:
+    #             trainable_params += num_params
+    #             trainable_status = "Trainable"
+    #             print(f"{name:<60} | Shape: {str(param.shape):<20} | Params: {num_params:>9,} | Status: {trainable_status}")
+    #         else:
+    #             trainable_status = "Frozen"
+    #
+    #     print("=" * 80)
+    #     percentage = 100 * trainable_params / total_params if total_params > 0 else 0
+    #
+    #     print(f'Total Parameters: {total_params:,}')
+    #     print(f'Trainable Parameters: {trainable_params:,}')
+    #     print(f'Trainable Parameters Percentage: {percentage:.2f}%')
+    #     print("=" * 80)
+    #
+    #     return total_params, trainable_params, percentage
+    #
+    # # 调用示例
+    # total, trainable, percentage = count_parameters(model)
 
     if args.optimizer == "sgd":
         optimizer = torch.optim.SGD(
@@ -212,4 +213,3 @@ def prompt_tune(args):
         # to_save_model = model.module
         path = os.path.join(args.save, f"{args.train_dataset}.pth")
         utils.torch_save(to_save_model, path)
-    return model
