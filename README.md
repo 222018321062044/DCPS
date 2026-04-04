@@ -11,6 +11,12 @@ This repository keeps the DCPS training and checkpoint-evaluation workflow, plus
 - Cache-prompt synergy for stronger robustness under distribution shifts.
 - Main experiment pipeline plus retained ablation and few-shot scripts.
 
+## Framework
+
+<p align="center">
+  <img src="images/framework.png" alt="DCPS Framework">
+</p>
+
 ## Repository Layout
 
 ```text
